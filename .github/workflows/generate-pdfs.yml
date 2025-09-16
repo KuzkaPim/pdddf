@@ -1,0 +1,48 @@
+name: Build presentation PDFs
+
+on:
+    push:
+        branches:
+            - main
+            - master
+            - presentation-models-behavior
+    workflow_dispatch:
+
+jobs:
+    build-and-commit:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: true
+
+            - name: Install TeX Live (minimal set)
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y texlive-latex-recommended texlive-xetex texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra latexmk
+
+            - name: Build presentation PDF
+              run: |
+                  mkdir -p build
+                  xelatex -output-directory=build presentation.tex || (tail -n +1 build/presentation.log && exit 1)
+                  xelatex -output-directory=build presentation.tex || true
+
+            - name: Build speaker notes PDF
+              run: |
+                  xelatex -output-directory=build speaker_notes.tex || (tail -n +1 build/speaker_notes.log && exit 1)
+
+            - name: Commit generated PDFs
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  mkdir -p pdf
+                  cp build/presentation.pdf pdf/presentation.pdf || true
+                  cp build/speaker_notes.pdf pdf/speaker_notes.pdf || true
+                  git add pdf/presentation.pdf pdf/speaker_notes.pdf || true
+                  if git diff --cached --quiet; then
+                    echo "No changes to commit"
+                  else
+                    git commit -m "chore: add generated PDFs (presentation + speaker notes)"
+                    git push
+                  fi
